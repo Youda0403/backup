@@ -373,7 +373,6 @@
     <div class="hdr-av" id="hdr-av">🌸</div>
     <div class="hdr-title" id="hdr-title">내 저장소</div>
     <button class="hdr-switch" onclick="goWelcome()">전환</button>
-    <button class="hdr-btn" onclick="goAdd()">+ 추가</button>
   </div>
   <div class="search-wrap">
     <input class="search-inp" type="search" id="search" placeholder="🔍 검색..." oninput="renderList()" />
@@ -413,7 +412,6 @@
   <div class="hdr">
     <button class="hdr-back" onclick="goHome()">‹</button>
     <div class="hdr-title" id="view-title">제목</div>
-    <button class="hdr-btn" id="mobile-btn" onclick="toggleMobileOpt()" title="모바일 최적화">📱</button>
     <button class="hdr-btn" onclick="editCurrent()">편집</button>
   </div>
   <div class="view-frame">
@@ -762,59 +760,10 @@ function renderList() {
   });
 }
 
-// ──────────────────────────────────────────
-// Mobile Optimization
-// ──────────────────────────────────────────
-let mobileOpt = true;
-
-const MOBILE_CSS = `
-<style id="__mob__">
-html,body{overflow-x:hidden!important;min-width:unset!important;width:100%!important;}
-*{max-width:100%!important;box-sizing:border-box!important;}
-img,video,svg,canvas,picture{max-width:100%!important;height:auto!important;}
-table{display:block!important;overflow-x:auto!important;}
-pre,code{white-space:pre-wrap!important;word-break:break-word!important;}
-</style>`;
-
-const MOBILE_VP = '<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5">';
-
-function mobilifyHTML(html) {
-  // 뷰포트 메타 교체 or 삽입
-  if (/<meta[^>]+viewport/i.test(html)) {
-    html = html.replace(/<meta[^>]+viewport[^>]*>/i, MOBILE_VP);
-  } else if (/<head>/i.test(html)) {
-    html = html.replace(/<head>/i, '<head>' + MOBILE_VP);
-  }
-  // CSS 주입
-  if (/<\/head>/i.test(html)) {
-    html = html.replace(/<\/head>/i, MOBILE_CSS + '</head>');
-  } else if (/<body/i.test(html)) {
-    html = html.replace(/<body[^>]*>/i, m => m + MOBILE_CSS);
-  } else {
-    html = MOBILE_CSS + html;
-  }
-  return html;
-}
-
-function renderViewIframe() {
-  const html = mobileOpt ? mobilifyHTML(CI.html) : CI.html;
-  document.getElementById('view-iframe').srcdoc = html;
-  const btn = document.getElementById('mobile-btn');
-  btn.textContent = mobileOpt ? '📱' : '🖥️';
-  btn.style.opacity = mobileOpt ? '1' : '0.45';
-}
-
-function toggleMobileOpt() {
-  mobileOpt = !mobileOpt;
-  renderViewIframe();
-  toast(mobileOpt ? '📱 모바일 최적화 켬' : '🖥️ 원본으로 보기');
-}
-
 function openItem(item) {
   CI = item;
-  mobileOpt = true;
   document.getElementById('view-title').textContent = item.title;
-  renderViewIframe();
+  document.getElementById('view-iframe').srcdoc = item.html;
   show('view');
 }
 
