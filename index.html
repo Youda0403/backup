@@ -147,9 +147,9 @@
       background: var(--cur-light); pointer-events: none;
     }
     .scard-thumb iframe {
-      width: 375px; height: 500px;
-      transform: scale(0.36) translateZ(0);
-      transform-origin: top left;
+      position: absolute; top: 0; left: 0;
+      width: 167%; height: 217px;
+      transform: scale(0.6); transform-origin: top left;
       border: none; pointer-events: none;
     }
 
@@ -345,7 +345,7 @@
     <div class="pcard a" id="pcard-a">
       <div class="pcard-av" id="av-a">🌸</div>
       <div class="pcard-info">
-        <div class="pcard-name" id="pname-a">프로필 A</div>
+        <div class="pcard-name" id="pname-a">커플링 A</div>
         <div class="pcard-count" id="pcnt-a">저장된 항목 없음</div>
       </div>
       <button class="pcard-setup" onclick="event.stopPropagation(); openModal('a')">설정</button>
@@ -354,7 +354,7 @@
     <div class="pcard b" id="pcard-b">
       <div class="pcard-av" id="av-b">🌙</div>
       <div class="pcard-info">
-        <div class="pcard-name" id="pname-b">프로필 B</div>
+        <div class="pcard-name" id="pname-b">커플링 B</div>
         <div class="pcard-count" id="pcnt-b">저장된 항목 없음</div>
       </div>
       <button class="pcard-setup" onclick="event.stopPropagation(); openModal('b')">설정</button>
@@ -428,6 +428,10 @@
     </div>
     <div class="fgroup" style="margin-top:14px">
       <label class="flabel">이모지</label>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+        <div id="emoji-preview" style="font-size:34px;width:52px;height:52px;background:var(--bg);border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;flex-shrink:0">🌸</div>
+        <input class="finput" id="emoji-custom" type="text" placeholder="이모지 직접 붙여넣기 🎨" style="flex:1" />
+      </div>
       <div class="emoji-grid" id="emoji-grid"></div>
     </div>
     <button class="sheet-ok" onclick="saveProfile()">완료 ✓</button>
@@ -457,7 +461,7 @@ function getProfiles() {
   catch { return defaultProfiles(); }
 }
 function defaultProfiles() {
-  return { a: { name: '프로필 A', emoji: '🌸' }, b: { name: '프로필 B', emoji: '🌙' } };
+  return { a: { name: '커플링 A', emoji: '🌸' }, b: { name: '커플링 B', emoji: '🌙' } };
 }
 function saveProfiles(p) { localStorage.setItem(KEY_PROF, JSON.stringify(p)); }
 
@@ -648,8 +652,17 @@ function lockApp() {
 function openModal(u) {
   MU = u; applyTheme(u);
   const p = getProfiles()[u];
-  document.getElementById('modal-title').textContent = u === 'a' ? '✨ 첫 번째 프로필' : '✨ 두 번째 프로필';
-  document.getElementById('modal-name').value = (p.name === `프로필 ${u.toUpperCase()}`) ? '' : p.name;
+  document.getElementById('modal-title').textContent = u === 'a' ? '✨ 커플링 A 설정' : '✨ 커플링 B 설정';
+  document.getElementById('modal-name').value = (p.name === `커플링 ${u.toUpperCase()}`) ? '' : p.name;
+
+  const customInp = document.getElementById('emoji-custom');
+  const preview = document.getElementById('emoji-preview');
+  customInp.value = p.emoji;
+  preview.textContent = p.emoji;
+  customInp.oninput = () => {
+    const val = [...customInp.value].find(c => c.trim());
+    if (val) { preview.textContent = val; grid.querySelectorAll('.emoji-opt').forEach(b => b.classList.remove('on')); }
+  };
 
   const grid = document.getElementById('emoji-grid');
   grid.innerHTML = '';
@@ -657,7 +670,12 @@ function openModal(u) {
     const btn = document.createElement('button');
     btn.className = 'emoji-opt' + (e === p.emoji ? ' on' : '');
     btn.textContent = e;
-    btn.onclick = () => { grid.querySelectorAll('.emoji-opt').forEach(b => b.classList.remove('on')); btn.classList.add('on'); };
+    btn.onclick = () => {
+      grid.querySelectorAll('.emoji-opt').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      customInp.value = e;
+      preview.textContent = e;
+    };
     grid.appendChild(btn);
   });
 
@@ -673,8 +691,10 @@ function closeModalOutside(e) {
 function saveProfile() {
   const name = document.getElementById('modal-name').value.trim();
   if (!name) { toast('이름을 입력해주세요!'); return; }
+  const customVal = document.getElementById('emoji-custom').value.trim();
+  const firstEmoji = customVal ? ([...customVal].find(c => c.trim()) || '') : '';
   const sel = document.querySelector('#emoji-grid .emoji-opt.on');
-  const emoji = sel ? sel.textContent : (MU === 'a' ? '🌸' : '🌙');
+  const emoji = firstEmoji || (sel ? sel.textContent : (MU === 'a' ? '🌸' : '🌙'));
   const p = getProfiles();
   p[MU] = { name, emoji };
   saveProfiles(p);
