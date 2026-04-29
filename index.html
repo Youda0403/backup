@@ -564,7 +564,8 @@ function initApp() {
 }
 
 function setLockState(state) {
-  pinState = state; pinBuffer = ''; pinFirst = '';
+  pinState = state; pinBuffer = '';
+  if (state !== 'setup2') pinFirst = '';
   updateDots();
   const sub = document.getElementById('lock-sub');
   const title = document.getElementById('lock-title');
