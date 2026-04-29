@@ -44,6 +44,7 @@
        WELCOME
     ══════════════════════════════ */
     #welcome {
+      position: relative;
       align-items: center;
       justify-content: center;
       padding: 48px 24px 64px;
@@ -253,6 +254,44 @@
     }
 
     /* ══════════════════════════════
+       LOCK SCREEN
+    ══════════════════════════════ */
+    #lock {
+      align-items: center; justify-content: center;
+      padding: 48px 24px 64px;
+      background: linear-gradient(160deg, #fff0f8 0%, #f0f4ff 50%, #fff8f0 100%);
+    }
+    .lock-icon { font-size: 56px; margin-bottom: 16px; }
+    .lock-title { font-size: 22px; font-weight: 900; margin-bottom: 6px; color: var(--text); }
+    .lock-sub { font-size: 14px; color: var(--text-sub); margin-bottom: 36px; text-align: center; min-height: 20px; }
+    .lock-dots { display: flex; gap: 16px; margin-bottom: 40px; }
+    .lock-dot {
+      width: 16px; height: 16px; border-radius: 50%;
+      border: 2px solid #ccc; background: transparent;
+      transition: all .15s;
+    }
+    .lock-dot.on { background: var(--a-primary); border-color: var(--a-primary); }
+    .lock-dot.err { background: #ff4444; border-color: #ff4444; }
+    .pin-pad { display: grid; grid-template-columns: repeat(3, 72px); gap: 14px; }
+    .pin-btn {
+      width: 72px; height: 72px; border-radius: 50%;
+      background: white; border: none; font-size: 24px; font-weight: 600;
+      cursor: pointer; box-shadow: var(--shadow);
+      display: flex; align-items: center; justify-content: center;
+      transition: transform .1s, background .1s;
+      color: var(--text);
+    }
+    .pin-btn:active { transform: scale(0.9); background: #f0f0f0; }
+    .pin-btn.del { font-size: 20px; color: var(--text-sub); }
+    .pin-btn.empty { background: transparent; box-shadow: none; cursor: default; }
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      20%,60% { transform: translateX(-8px); }
+      40%,80% { transform: translateX(8px); }
+    }
+    .lock-dots.shake { animation: shake .35s ease; }
+
+    /* ══════════════════════════════
        TOAST
     ══════════════════════════════ */
     #toast {
@@ -269,8 +308,36 @@
 </head>
 <body>
 
+<!-- ═══ LOCK ═══ -->
+<div id="lock" class="view active">
+  <div class="lock-icon" id="lock-icon">🔒</div>
+  <div class="lock-title" id="lock-title">잠금 해제</div>
+  <div class="lock-sub" id="lock-sub">비밀번호를 입력해주세요</div>
+  <div class="lock-dots" id="lock-dots">
+    <div class="lock-dot" id="d0"></div>
+    <div class="lock-dot" id="d1"></div>
+    <div class="lock-dot" id="d2"></div>
+    <div class="lock-dot" id="d3"></div>
+  </div>
+  <div class="pin-pad">
+    <button class="pin-btn" onclick="pinInput('1')">1</button>
+    <button class="pin-btn" onclick="pinInput('2')">2</button>
+    <button class="pin-btn" onclick="pinInput('3')">3</button>
+    <button class="pin-btn" onclick="pinInput('4')">4</button>
+    <button class="pin-btn" onclick="pinInput('5')">5</button>
+    <button class="pin-btn" onclick="pinInput('6')">6</button>
+    <button class="pin-btn" onclick="pinInput('7')">7</button>
+    <button class="pin-btn" onclick="pinInput('8')">8</button>
+    <button class="pin-btn" onclick="pinInput('9')">9</button>
+    <button class="pin-btn empty" disabled></button>
+    <button class="pin-btn" onclick="pinInput('0')">0</button>
+    <button class="pin-btn del" onclick="pinDel()">⌫</button>
+  </div>
+</div>
+
 <!-- ═══ WELCOME ═══ -->
 <div id="welcome" class="view active">
+  <button onclick="lockApp()" style="position:absolute;top:calc(16px + env(safe-area-inset-top,0px));right:16px;background:white;border:none;border-radius:20px;padding:7px 14px;font-size:13px;cursor:pointer;box-shadow:var(--shadow);color:var(--text-sub);">🔒 잠금</button>
   <div class="wlc-emoji">💕</div>
   <h1 class="wlc-title">커플 HTML 뷰어</h1>
   <p class="wlc-sub">AI랑 나눈 이야기를 예쁘게 백업해요</p>
@@ -471,6 +538,110 @@ document.getElementById('pcard-a').addEventListener('click', () => selectUser('a
 document.getElementById('pcard-b').addEventListener('click', () => selectUser('b'));
 
 // ──────────────────────────────────────────
+// Lock / PIN
+// ──────────────────────────────────────────
+const KEY_PWD = 'cvb_pwd_hash';
+let pinBuffer = '';
+let pinState = 'unlock'; // 'unlock' | 'setup1' | 'setup2'
+let pinFirst = '';
+
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+function initApp() {
+  if (sessionStorage.getItem('cvb_unlocked') === '1') {
+    refreshWelcome(); show('welcome'); return;
+  }
+  const stored = localStorage.getItem(KEY_PWD);
+  if (!stored) {
+    setLockState('setup1');
+  } else {
+    setLockState('unlock');
+  }
+  show('lock');
+}
+
+function setLockState(state) {
+  pinState = state; pinBuffer = ''; pinFirst = '';
+  updateDots();
+  const sub = document.getElementById('lock-sub');
+  const title = document.getElementById('lock-title');
+  const icon = document.getElementById('lock-icon');
+  if (state === 'unlock') {
+    icon.textContent = '🔒'; title.textContent = '잠금 해제';
+    sub.textContent = '비밀번호를 입력해주세요';
+  } else if (state === 'setup1') {
+    icon.textContent = '🔐'; title.textContent = '비밀번호 설정';
+    sub.textContent = '새 비밀번호 4자리를 입력해주세요';
+  } else {
+    icon.textContent = '🔐'; title.textContent = '비밀번호 확인';
+    sub.textContent = '한 번 더 입력해주세요';
+  }
+}
+
+function updateDots(err) {
+  for (let i = 0; i < 4; i++) {
+    const d = document.getElementById(`d${i}`);
+    d.classList.toggle('on', i < pinBuffer.length && !err);
+    d.classList.toggle('err', !!err);
+  }
+}
+
+function pinInput(digit) {
+  if (pinBuffer.length >= 4) return;
+  pinBuffer += digit;
+  updateDots();
+  if (pinBuffer.length === 4) setTimeout(pinSubmit, 80);
+}
+
+function pinDel() {
+  pinBuffer = pinBuffer.slice(0, -1);
+  updateDots();
+}
+
+async function pinSubmit() {
+  const hash = await sha256(pinBuffer);
+  if (pinState === 'unlock') {
+    const stored = localStorage.getItem(KEY_PWD);
+    if (hash === stored) {
+      sessionStorage.setItem('cvb_unlocked', '1');
+      refreshWelcome(); show('welcome');
+    } else {
+      pinShake(); pinBuffer = ''; updateDots();
+      document.getElementById('lock-sub').textContent = '틀렸어요, 다시 입력해주세요 🥺';
+    }
+  } else if (pinState === 'setup1') {
+    pinFirst = hash;
+    setLockState('setup2');
+  } else {
+    if (hash === pinFirst) {
+      localStorage.setItem(KEY_PWD, hash);
+      sessionStorage.setItem('cvb_unlocked', '1');
+      toast('비밀번호가 설정됐어요! 🔐');
+      refreshWelcome(); show('welcome');
+    } else {
+      pinShake(); setLockState('setup1');
+      document.getElementById('lock-sub').textContent = '일치하지 않아요, 처음부터 다시 입력해주세요';
+    }
+  }
+}
+
+function pinShake() {
+  const dots = document.getElementById('lock-dots');
+  updateDots(true);
+  dots.classList.add('shake');
+  setTimeout(() => { dots.classList.remove('shake'); updateDots(false); }, 400);
+}
+
+function lockApp() {
+  sessionStorage.removeItem('cvb_unlocked');
+  setLockState('unlock');
+  show('lock');
+}
+
+// ──────────────────────────────────────────
 // Profile Modal
 // ──────────────────────────────────────────
 function openModal(u) {
@@ -633,7 +804,7 @@ function toast(msg) {
 // ──────────────────────────────────────────
 // Init
 // ──────────────────────────────────────────
-refreshWelcome();
+initApp();
 </script>
 </body>
 </html>
