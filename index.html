@@ -87,6 +87,17 @@
     }
     .pcard-arrow { font-size: 22px; color: #ccc; }
 
+    .pcard-add {
+      background: white; border-radius: var(--r); padding: 18px 20px;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      cursor: pointer; border: 2px dashed #d0d0d0;
+      box-shadow: var(--shadow); transition: transform .15s ease;
+      color: var(--text-sub); font-size: 15px; font-weight: 600;
+      width: 100%;
+    }
+    .pcard-add:active { transform: scale(0.97); }
+    .pcard-add-ico { font-size: 22px; }
+
     /* ══════════════════════════════
        HEADER
     ══════════════════════════════ */
@@ -257,6 +268,12 @@
       font-weight: 700; cursor: pointer; width: 100%; margin-top: 18px;
     }
 
+    .sheet-del {
+      background: #fff5f5; color: #e53935; border: 2px solid #ffcdd2;
+      border-radius: var(--r-sm); padding: 13px; font-size: 14px;
+      font-weight: 700; cursor: pointer; width: 100%; margin-top: 10px;
+    }
+
     /* ══════════════════════════════
        LOCK SCREEN
     ══════════════════════════════ */
@@ -345,25 +362,8 @@
   <div class="wlc-emoji">💕</div>
   <h1 class="wlc-title">커플 HTML 뷰어</h1>
   <p class="wlc-sub">AI랑 나눈 이야기를 예쁘게 백업해요</p>
-  <div class="profile-cards">
-    <div class="pcard a" id="pcard-a">
-      <div class="pcard-av" id="av-a">🌸</div>
-      <div class="pcard-info">
-        <div class="pcard-name" id="pname-a">커플링 A</div>
-        <div class="pcard-count" id="pcnt-a">저장된 항목 없음</div>
-      </div>
-      <button class="pcard-setup" onclick="event.stopPropagation(); openModal('a')">설정</button>
-      <div class="pcard-arrow">›</div>
-    </div>
-    <div class="pcard b" id="pcard-b">
-      <div class="pcard-av" id="av-b">🌙</div>
-      <div class="pcard-info">
-        <div class="pcard-name" id="pname-b">커플링 B</div>
-        <div class="pcard-count" id="pcnt-b">저장된 항목 없음</div>
-      </div>
-      <button class="pcard-setup" onclick="event.stopPropagation(); openModal('b')">설정</button>
-      <div class="pcard-arrow">›</div>
-    </div>
+  <div class="profile-cards" id="profile-cards">
+    <!-- dynamically rendered by refreshWelcome() -->
   </div>
 </div>
 
@@ -438,6 +438,7 @@
       <div class="emoji-grid" id="emoji-grid"></div>
     </div>
     <button class="sheet-ok" onclick="saveProfile()">완료 ✓</button>
+    <button class="sheet-del" id="modal-del" onclick="deleteProfile()">캐릭터 삭제 🗑</button>
   </div>
 </div>
 
@@ -452,21 +453,47 @@ const EMOJIS = ['🌸','🌙','⭐','🦋','🌺','🍀','🌈','🎀','💫','�
                  '🐰','🦊','🌻','🍓','🎵','✨','💜','💙','🌿','🐸',
                  '🎠','🍑','🌷','🦄','🍭','🧸','🎶','🌊','🍵','🔮'];
 
+const THEMES = [
+  { primary: '#ff6b9d', light: '#fff0f6', border: '#ffc0d9' },
+  { primary: '#7b9dff', light: '#f0f3ff', border: '#c0cfff' },
+  { primary: '#4ecb71', light: '#f0fff4', border: '#b2e8c4' },
+  { primary: '#ffb347', light: '#fff8f0', border: '#ffd9a8' },
+  { primary: '#b39ddb', light: '#f5f0ff', border: '#d4c0f0' },
+];
+
 const KEY_PROF = 'cvb_profiles';
+const KEY_PROF_LIST = 'cvb_profile_list';
 const KEY_SAVES = u => `cvb_saves_${u}`;
 
-let CU = null;       // current user 'a' | 'b'
+let CU = null;       // current user id
 let CI = null;       // current item being viewed/edited
-let MU = null;       // user being set up in modal
+let MU = null;       // profile id being set up in modal, or 'new'
 
 function getProfiles() {
-  try { return JSON.parse(localStorage.getItem(KEY_PROF)) || defaultProfiles(); }
-  catch { return defaultProfiles(); }
+  try {
+    const list = localStorage.getItem(KEY_PROF_LIST);
+    if (list) return JSON.parse(list);
+    // Migrate from old two-user format
+    const old = localStorage.getItem(KEY_PROF);
+    if (old) {
+      const oldData = JSON.parse(old);
+      const profiles = [
+        { id: 'a', name: oldData.a.name, emoji: oldData.a.emoji, themeIdx: 0 },
+        { id: 'b', name: oldData.b.name, emoji: oldData.b.emoji, themeIdx: 1 },
+      ];
+      localStorage.setItem(KEY_PROF_LIST, JSON.stringify(profiles));
+      return profiles;
+    }
+  } catch {}
+  return [
+    { id: 'a', name: '커플링 A', emoji: '🌸', themeIdx: 0 },
+    { id: 'b', name: '커플링 B', emoji: '🌙', themeIdx: 1 },
+  ];
 }
-function defaultProfiles() {
-  return { a: { name: '커플링 A', emoji: '🌸' }, b: { name: '커플링 B', emoji: '🌙' } };
+
+function saveProfiles(profiles) {
+  localStorage.setItem(KEY_PROF_LIST, JSON.stringify(profiles));
 }
-function saveProfiles(p) { localStorage.setItem(KEY_PROF, JSON.stringify(p)); }
 
 function getSaves(u) {
   try { return JSON.parse(localStorage.getItem(KEY_SAVES(u))) || []; }
@@ -477,17 +504,12 @@ function setSaves(u, arr) { localStorage.setItem(KEY_SAVES(u), JSON.stringify(ar
 // ──────────────────────────────────────────
 // Theme
 // ──────────────────────────────────────────
-function applyTheme(u) {
+function applyTheme(themeIdx) {
+  const t = THEMES[themeIdx % THEMES.length];
   const r = document.documentElement.style;
-  if (u === 'a') {
-    r.setProperty('--cur', 'var(--a-primary)');
-    r.setProperty('--cur-light', 'var(--a-light)');
-    r.setProperty('--cur-border', 'var(--a-border)');
-  } else {
-    r.setProperty('--cur', 'var(--b-primary)');
-    r.setProperty('--cur-light', 'var(--b-light)');
-    r.setProperty('--cur-border', 'var(--b-border)');
-  }
+  r.setProperty('--cur', t.primary);
+  r.setProperty('--cur-light', t.light);
+  r.setProperty('--cur-border', t.border);
 }
 
 // ──────────────────────────────────────────
@@ -523,26 +545,58 @@ function editCurrent() {
 // Welcome
 // ──────────────────────────────────────────
 function refreshWelcome() {
-  const p = getProfiles();
-  ['a','b'].forEach(u => {
-    const cnt = getSaves(u).length;
-    document.getElementById(`av-${u}`).textContent = p[u].emoji;
-    document.getElementById(`pname-${u}`).textContent = p[u].name;
-    document.getElementById(`pcnt-${u}`).textContent = cnt === 0 ? '저장된 항목 없음' : `${cnt}개 저장됨`;
+  const profiles = getProfiles();
+  const container = document.getElementById('profile-cards');
+  container.innerHTML = '';
+
+  profiles.forEach(p => {
+    const cnt = getSaves(p.id).length;
+    const t = THEMES[p.themeIdx % THEMES.length];
+
+    const card = document.createElement('div');
+    card.className = 'pcard';
+    card.style.borderColor = t.border;
+
+    const av = document.createElement('div');
+    av.className = 'pcard-av';
+    av.style.background = t.light;
+    av.textContent = p.emoji;
+
+    const info = document.createElement('div');
+    info.className = 'pcard-info';
+    info.innerHTML = `<div class="pcard-name">${esc(p.name)}</div>
+      <div class="pcard-count">${cnt === 0 ? '저장된 항목 없음' : cnt + '개 저장됨'}</div>`;
+
+    const setupBtn = document.createElement('button');
+    setupBtn.className = 'pcard-setup';
+    setupBtn.textContent = '설정';
+    setupBtn.addEventListener('click', e => { e.stopPropagation(); openModal(p.id); });
+
+    const arrow = document.createElement('div');
+    arrow.className = 'pcard-arrow';
+    arrow.textContent = '›';
+
+    card.append(av, info, setupBtn, arrow);
+    card.addEventListener('click', () => selectUser(p.id));
+    container.appendChild(card);
   });
+
+  const addCard = document.createElement('button');
+  addCard.className = 'pcard-add';
+  addCard.innerHTML = '<span class="pcard-add-ico">＋</span> 캐릭터 추가';
+  addCard.addEventListener('click', () => openModal('new'));
+  container.appendChild(addCard);
 }
 
-function selectUser(u) {
-  CU = u; applyTheme(u);
-  const p = getProfiles();
-  document.getElementById('hdr-av').textContent = p[u].emoji;
-  document.getElementById('hdr-title').textContent = p[u].name + '의 저장소';
+function selectUser(id) {
+  CU = id;
+  const profiles = getProfiles();
+  const p = profiles.find(x => x.id === id);
+  applyTheme(p.themeIdx);
+  document.getElementById('hdr-av').textContent = p.emoji;
+  document.getElementById('hdr-title').textContent = p.name + '의 저장소';
   goHome();
 }
-
-// card click → selectUser
-document.getElementById('pcard-a').addEventListener('click', () => selectUser('a'));
-document.getElementById('pcard-b').addEventListener('click', () => selectUser('b'));
 
 // ──────────────────────────────────────────
 // Lock / PIN
@@ -652,16 +706,24 @@ function lockApp() {
 // ──────────────────────────────────────────
 // Profile Modal
 // ──────────────────────────────────────────
-function openModal(u) {
-  MU = u; applyTheme(u);
-  const p = getProfiles()[u];
-  document.getElementById('modal-title').textContent = u === 'a' ? '✨ 커플링 A 설정' : '✨ 커플링 B 설정';
-  document.getElementById('modal-name').value = (p.name === `커플링 ${u.toUpperCase()}`) ? '' : p.name;
+function openModal(idOrNew) {
+  MU = idOrNew;
+  const isNew = idOrNew === 'new';
+  const profiles = getProfiles();
+  const p = isNew ? null : profiles.find(x => x.id === idOrNew);
+  const themeIdx = isNew ? profiles.length % THEMES.length : p.themeIdx;
 
+  applyTheme(themeIdx);
+
+  document.getElementById('modal-title').textContent = isNew ? '✨ 새 캐릭터 추가' : '✨ 프로필 설정';
+  document.getElementById('modal-name').value = isNew ? '' : p.name;
+  document.getElementById('modal-del').style.display = isNew ? 'none' : 'block';
+
+  const currentEmoji = isNew ? '✨' : p.emoji;
   const customInp = document.getElementById('emoji-custom');
   const preview = document.getElementById('emoji-preview');
-  customInp.value = p.emoji;
-  preview.textContent = p.emoji;
+  customInp.value = currentEmoji;
+  preview.textContent = currentEmoji;
   customInp.oninput = () => {
     const val = [...customInp.value].find(c => c.trim());
     if (val) { preview.textContent = val; grid.querySelectorAll('.emoji-opt').forEach(b => b.classList.remove('on')); }
@@ -671,7 +733,7 @@ function openModal(u) {
   grid.innerHTML = '';
   EMOJIS.forEach(e => {
     const btn = document.createElement('button');
-    btn.className = 'emoji-opt' + (e === p.emoji ? ' on' : '');
+    btn.className = 'emoji-opt' + (e === currentEmoji ? ' on' : '');
     btn.textContent = e;
     btn.onclick = () => {
       grid.querySelectorAll('.emoji-opt').forEach(b => b.classList.remove('on'));
@@ -697,13 +759,35 @@ function saveProfile() {
   const customVal = document.getElementById('emoji-custom').value.trim();
   const firstEmoji = customVal ? ([...customVal].find(c => c.trim()) || '') : '';
   const sel = document.querySelector('#emoji-grid .emoji-opt.on');
-  const emoji = firstEmoji || (sel ? sel.textContent : (MU === 'a' ? '🌸' : '🌙'));
-  const p = getProfiles();
-  p[MU] = { name, emoji };
-  saveProfiles(p);
+  const emoji = firstEmoji || (sel ? sel.textContent : '✨');
+
+  const profiles = getProfiles();
+  if (MU === 'new') {
+    const newId = Date.now().toString();
+    const themeIdx = profiles.length % THEMES.length;
+    profiles.push({ id: newId, name, emoji, themeIdx });
+    toast('캐릭터가 추가됐어요! ✨');
+  } else {
+    const idx = profiles.findIndex(p => p.id === MU);
+    if (idx !== -1) { profiles[idx].name = name; profiles[idx].emoji = emoji; }
+    toast('프로필 저장됐어요! ✨');
+  }
+  saveProfiles(profiles);
   document.getElementById('modal').classList.add('hidden');
   refreshWelcome();
-  toast('프로필 저장됐어요! ✨');
+}
+
+function deleteProfile() {
+  const profiles = getProfiles();
+  if (profiles.length <= 1) { toast('최소 1명은 있어야 해요!'); return; }
+  const p = profiles.find(x => x.id === MU);
+  const name = p ? p.name : '이 캐릭터';
+  if (!confirm(`"${name}"와 저장된 모든 항목이 삭제됩니다. 계속할까요?`)) return;
+  localStorage.removeItem(KEY_SAVES(MU));
+  saveProfiles(profiles.filter(x => x.id !== MU));
+  document.getElementById('modal').classList.add('hidden');
+  refreshWelcome();
+  toast('캐릭터가 삭제됐어요 🗑');
 }
 
 // ──────────────────────────────────────────
@@ -743,7 +827,6 @@ function renderList() {
         <button class="scard-del" data-id="${item.id}">🗑</button>
       </div>`;
 
-    // thumbnail iframe (set via JS to avoid attribute escaping issues)
     const thumb = card.querySelector('.scard-thumb');
     const iframe = document.createElement('iframe');
     iframe.setAttribute('sandbox', 'allow-scripts');
